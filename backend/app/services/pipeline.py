@@ -47,7 +47,7 @@ class PipelineService:
         return entry, []
 
     def run_action(self, entry_id: int, action: str) -> tuple[dict[str, Any] | None, str]:
-        entry = store.find(MODULE, entry_id)
+        entry = store.find_live(MODULE, entry_id)
         if entry is None:
             return None, f"链路节点 {entry_id} 不存在或已归档"
         if action not in ACTION_RULES:

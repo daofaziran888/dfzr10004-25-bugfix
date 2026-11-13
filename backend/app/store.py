@@ -19,9 +19,18 @@ class Store:
         return sorted(self._tables)
 
     def rows(self, module: str) -> list[dict[str, Any]]:
+        """返回表本身：服务层状态流转需要原地写入，仅限服务层使用。"""
         return self._tables.setdefault(module, [])
 
     def find(self, module: str, entry_id: int) -> dict[str, Any] | None:
+        """按 id 查单行，返回副本：调用方不能通过查询结果意外改写仓库内部状态。"""
+        for row in self.rows(module):
+            if int(row.get("id", 0)) == entry_id:
+                return dict(row)
+        return None
+
+    def find_live(self, module: str, entry_id: int) -> dict[str, Any] | None:
+        """按 id 查仓库内部的真实行，供服务层状态流转原地写入；读路径不要用它。"""
         for row in self.rows(module):
             if int(row.get("id", 0)) == entry_id:
                 return row

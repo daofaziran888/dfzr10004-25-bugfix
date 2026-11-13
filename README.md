@@ -34,6 +34,13 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 健康检查：`curl http://127.0.0.1:8000/api/health`
 
+后端回归测试：
+
+```bash
+cd backend
+.venv/bin/python -m unittest discover -s tests -v
+```
+
 ### 前端
 
 ```bash
@@ -72,6 +79,25 @@ npm run dev
   `backend/app/routers/<模块>.py`，业务规则在 `backend/app/services/<模块>.py`。
 - 列表接口统一返回 `{ items, total, page, size }`，动作接口统一返回 `{ ok, message }`。
 - 状态流转只允许在 `app/services` 里改，路由层不做业务判断。
+- 仓库读接口 `store.find` 返回行副本，服务层写流转用 `store.find_live`，
+  避免外部通过查询结果意外改写仓库内部状态。
+
+### 采集频率控制（throttle）与采集任务编排（taskplan）的联动口径
+
+- 频率策略状态机单向流转：`待配置 → 候选 → 生效 → 停用`，重复到达的动作命令幂等，只推进一次。
+- 保存（登记 `POST` / 修改 `PUT`）前统一校验，不符合条件不允许保存或启用：
+  - 目标站点：必须在 `app/catalog.py` 站点目录内（去首尾空白后精确匹配）；
+  - 请求间隔：100~60000 毫秒整数，且不低于站点最小间隔；
+  - 日请求上限：1~100000 正整数，且不得超过站点日硬配额（额度冲突口径）；
+  - 并发数量：1~50 正整数，且不得超过站点并发硬配额；
+  - 优先级权重：1~100 的正整数。
+- 同站点同时只允许一条「生效」策略。启用冲突时拒绝并在消息里指出现有策略编号；
+  显式携带 `replace_policy=true` 时以本次候选为准，旧生效策略自动转停用。
+- 策略停用（含被替换隐式停用、修改生效策略导致退回待配置）后，引用其额度的
+  采集计划自动进入「待重新排队」，旧额度快照作废；排队/重新排队只按
+  `active_policy_for_site` 解析当前唯一生效策略，站点无生效策略时拒绝排队。
+- 待重新排队清单接口：`GET /api/taskplan/requeue-queue`；站点配额目录：
+  `GET /api/throttle/sites`。
 
 领域：数据工程
 子方向：数据采集、爬虫与RPA
